@@ -57,7 +57,7 @@ func TestExtractLayer_BasicFilesDirsSymlinks(t *testing.T) {
 			hdr  tar.Header
 			body []byte
 		}{
-			tar.Header{Name: "etc/hostname", Typeflag: tar.TypeReg, Mode: 0o644}, []byte("ncl-host\n"),
+			tar.Header{Name: "etc/hostname", Typeflag: tar.TypeReg, Mode: 0o644}, []byte("weft-microvm-host\n"),
 		},
 		struct {
 			hdr  tar.Header
@@ -75,7 +75,7 @@ func TestExtractLayer_BasicFilesDirsSymlinks(t *testing.T) {
 	if err := extractLayer(bytes.NewReader(pkg), dest); err != nil {
 		t.Fatalf("extractLayer: %v", err)
 	}
-	if b, err := os.ReadFile(filepath.Join(dest, "etc/hostname")); err != nil || string(b) != "ncl-host\n" {
+	if b, err := os.ReadFile(filepath.Join(dest, "etc/hostname")); err != nil || string(b) != "weft-microvm-host\n" {
 		t.Errorf("etc/hostname: err=%v body=%q", err, b)
 	}
 	if fi, err := os.Lstat(filepath.Join(dest, "bin/ash")); err != nil || fi.Mode()&os.ModeSymlink == 0 {

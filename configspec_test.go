@@ -68,7 +68,7 @@ func TestParseImageUser(t *testing.T) {
 		{"1000:1000", 1000, 1000, false},
 		{"0:0", 0, 0, false},
 		{"33:33", 33, 33, false},
-		// Named forms: deferred to ncl-init via /etc/passwd lookup,
+		// Named forms: deferred to weft-microvm-init via /etc/passwd lookup,
 		// returning an explicit error today.
 		{"root", 0, 0, true},
 		{"user:group", 0, 0, true},

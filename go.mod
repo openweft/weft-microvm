@@ -3,12 +3,12 @@ module github.com/openweft/weft-microvm
 go 1.25.1
 
 require (
-	github.com/cloud-boot/init v0.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.0
 	github.com/openweft/weft-client v0.0.0
 	github.com/openweft/weft-microvm-init v0.0.0
 	github.com/openweft/weft-proto v0.0.0
+	golang.org/x/net v0.52.0
 	google.golang.org/grpc v1.81.1
 )
 
@@ -22,7 +22,6 @@ require (
 	github.com/zclconf/go-cty v1.18.1 // indirect
 	golang.org/x/crypto v0.50.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
@@ -39,30 +38,8 @@ replace github.com/openweft/weft-proto => ../weft-proto
 
 replace github.com/openweft/weft-microvm-init => ../weft-microvm-init
 
-replace github.com/cloud-boot/init => ../../cloud-boot/init
-
 replace github.com/grpc-transports/ssh => ../../grpc-transports/ssh
 
-// Transitive local modules pulled in via cloud-boot/init and
-// weft-client (Go honours only the main module's replace block).
+// Transitive local module pulled in via weft-client (Go honours only the
+// main module's replace block).
 replace github.com/grpc-transports/wireguard => ../../grpc-transports/wireguard
-
-replace github.com/go-coff/peln => ../../go-coff/peln
-
-replace github.com/go-filesystems/interface => ../../go-filesystems/interface
-
-replace github.com/go-filesystems/ext4 => ../../go-filesystems/ext4
-
-replace github.com/go-filesystems/xfs => ../../go-filesystems/xfs
-
-replace github.com/go-filesystems/btrfs => ../../go-filesystems/btrfs
-
-replace github.com/go-filesystems/zfs => ../../go-filesystems/zfs
-
-replace github.com/go-fde/luks => ../../go-fde/luks
-
-replace github.com/go-crypto/zfscrypt => ../../go-crypto/zfscrypt
-
-replace github.com/go-crypto/ccm => ../../go-crypto/ccm
-
-replace github.com/go-bootloaders/systemd-boot => ../../go-bootloaders/systemd-boot

@@ -17,7 +17,7 @@ import (
 //     for that name at the root of the initramfs cpio).
 func TestPack_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	bin := filepath.Join(dir, "ncl-init")
+	bin := filepath.Join(dir, "weft-microvm-init")
 	wanted := []byte("\x7fELF…actually-not-elf-just-bytes")
 	if err := os.WriteFile(bin, wanted, 0o755); err != nil {
 		t.Fatal(err)

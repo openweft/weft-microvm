@@ -6,32 +6,32 @@ import (
 )
 
 // TestRun_UnpulledImage_NoAutoPull_HintsAtPull asserts that when
-// NCL_NO_AUTO_PULL=1 (strict offline mode) the error mentions
-// `ncl pull` so the operator knows the explicit recovery path.
+// WEFT_NO_AUTO_PULL=1 (strict offline mode) the error mentions
+// `weft-microvm pull` so the operator knows the explicit recovery path.
 // Auto-pull is the default and is exercised by
 // TestRun_UnpulledImage_AutoPullAttempted below.
 func TestRun_UnpulledImage_NoAutoPull_HintsAtPull(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 
 	err := Run(Args{Image: "definitely-not-pulled-image:0.0.0", MountTag: "rootfs0"})
 	if err == nil {
-		t.Fatal("expected error for unpulled image under NCL_NO_AUTO_PULL=1")
+		t.Fatal("expected error for unpulled image under WEFT_NO_AUTO_PULL=1")
 	}
-	if !strings.Contains(err.Error(), "ncl pull") {
-		t.Errorf("error message should suggest `ncl pull`, got: %s", err)
+	if !strings.Contains(err.Error(), "weft-microvm pull") {
+		t.Errorf("error message should suggest `weft-microvm pull`, got: %s", err)
 	}
 }
 
 // TestRun_UnpulledImage_AutoPullAttempted asserts that the default
 // behaviour is to attempt an auto-pull on cache miss. The pull
 // itself will fail (the image doesn't exist), but the error surface
-// should mention auto-pull rather than the offline "ncl pull" hint —
+// should mention auto-pull rather than the offline "weft-microvm pull" hint —
 // so the user sees they hit a network/registry issue, not a missing
 // step.
 func TestRun_UnpulledImage_AutoPullAttempted(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "")
 
 	err := Run(Args{Image: "definitely-not-pulled-image:0.0.0", MountTag: "rootfs0"})
 	if err == nil {

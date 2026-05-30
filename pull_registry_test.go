@@ -142,7 +142,7 @@ func layerTarGz(t *testing.T, files map[string]string) []byte {
 // newImageRegistry stands up an in-memory registry serving a single
 // image manifest (one gzipped layer + a config) and returns the running
 // httptest.Server plus the host:port. The image config carries the
-// supplied process bits so the derived .ncl/config.json is observable.
+// supplied process bits so the derived .weft-microvm/config.json is observable.
 func newImageRegistry(t *testing.T, cfg ocispec.ImageConfig, layerFiles map[string]string) (*httptest.Server, string) {
 	t.Helper()
 	reg := newFakeRegistry()
@@ -199,8 +199,8 @@ func TestPull_HappyPath_FromInMemoryRegistry(t *testing.T) {
 			t.Errorf("missing %s: %v", f, err)
 		}
 	}
-	// .ncl/config.json was derived from the image config.
-	b, err := os.ReadFile(filepath.Join(rootfs, ".ncl", "config.json"))
+	// .weft-microvm/config.json was derived from the image config.
+	b, err := os.ReadFile(filepath.Join(rootfs, ".weft-microvm", "config.json"))
 	if err != nil {
 		t.Fatalf("read derived config: %v", err)
 	}
