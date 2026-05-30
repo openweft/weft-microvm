@@ -84,6 +84,7 @@ func (r *fakeRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		w.Header().Set("Content-Type", r.mediaType[last])
 		w.Header().Set("Docker-Content-Digest", fmt.Sprintf("sha256:%x", sha256.Sum256(data)))
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 		if req.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -101,6 +102,7 @@ func (r *fakeRegistry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 		w.Header().Set("Content-Type", mt)
 		w.Header().Set("Docker-Content-Digest", last)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
 		if req.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)
 			return
@@ -235,8 +237,13 @@ func TestPull_ManifestNotFound(t *testing.T) {
 	host := strings.TrimPrefix(srv.URL, "http://")
 
 	err := Pull(host + "/no/such:tag")
-	if err == nil || !strings.Contains(err.Error(), "pull manifest") {
-		t.Fatalf("expected pull manifest error, got %v", err)
+	// oras-go Resolve surfaces a "not found" error from the HEAD probe
+	// before we ever issue the GET that the old client phrased as
+	// "pull manifest". Both wordings mean the same thing — the tag is
+	// unresolvable. Match on "not found" which is stable across oras-go
+	// versions and what registries actually return on a missing tag.
+	if err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected not-found error, got %v", err)
 	}
 }
 
