@@ -15,12 +15,12 @@ import (
 	"google.golang.org/grpc"
 )
 
-// stubVzd is a minimal in-process VzdService implementing only the two
+// stubVzd is a minimal in-process WeftAgent implementing only the two
 // RPCs the microvm orchestration calls (RegisterMicroVM, StartVM) plus
 // the embedded unimplemented base for the rest. Per-RPC behaviour is
 // injected via the Fn hooks.
 type stubVzd struct {
-	vzdv1.UnimplementedVzdServiceServer
+	vzdv1.UnimplementedWeftAgentServer
 	registerFn func(context.Context, *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error)
 	startFn    func(context.Context, *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error)
 }
@@ -45,7 +45,7 @@ func startStubVzd(t *testing.T, stub *stubVzd) string {
 	t.Helper()
 	socket := filepath.Join("/tmp", fmt.Sprintf("mv-test-%s.sock", time.Now().Format("150405.000000000")))
 	srv := grpc.NewServer()
-	vzdv1.RegisterVzdServiceServer(srv, stub)
+	vzdv1.RegisterWeftAgentServer(srv, stub)
 	lis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen unix %s: %v", socket, err)
