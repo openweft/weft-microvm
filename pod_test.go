@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	vzdv1 "github.com/openweft/weft-proto"
+	weftv1 "github.com/openweft/weft-proto"
 	weftpod "github.com/openweft/weft-microvm-init/pkg/pod"
 )
 
@@ -98,21 +98,21 @@ func TestEnvToMap(t *testing.T) {
 	}
 }
 
-// seedContainerConfig writes a derived .ncl/config.json for the given
+// seedContainerConfig writes a derived .weft-microvm/config.json for the given
 // image so containerFromImage can read it.
 func seedContainerConfig(t *testing.T, image string, p processSpec) string {
 	t.Helper()
 	rs := refsafe(image)
 	rootfs := rootfsPath(rs)
-	nclDir := filepath.Join(rootfs, ".ncl")
-	if err := os.MkdirAll(nclDir, 0o755); err != nil {
+	microvmDir := filepath.Join(rootfs, ".weft-microvm")
+	if err := os.MkdirAll(microvmDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	out, err := marshalConfig(p)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(nclDir, "config.json"), out, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(microvmDir, "config.json"), out, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return rootfs
@@ -194,9 +194,9 @@ func TestContainerFromImage_MissingConfig(t *testing.T) {
 func TestContainerFromImage_BadConfigJSON(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	rootfs := filepath.Join(t.TempDir(), "rootfs")
-	nclDir := filepath.Join(rootfs, ".ncl")
-	_ = os.MkdirAll(nclDir, 0o755)
-	_ = os.WriteFile(filepath.Join(nclDir, "config.json"), []byte("{bad"), 0o644)
+	microvmDir := filepath.Join(rootfs, ".weft-microvm")
+	_ = os.MkdirAll(microvmDir, 0o755)
+	_ = os.WriteFile(filepath.Join(microvmDir, "config.json"), []byte("{bad"), 0o644)
 	mc := &manifestCtr{ID: "web", Image: "x"}
 	if _, err := containerFromImage(mc, "rootfs0", rootfs); err == nil || !strings.Contains(err.Error(), "decode") {
 		t.Fatalf("expected decode error, got %v", err)
@@ -252,12 +252,12 @@ func TestWritePodJSON_MkdirError(t *testing.T) {
 func TestLocatePodBoot(t *testing.T) {
 	t.Run("happy path defaults", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		t.Setenv("NCL_KERNEL", "")
-		t.Setenv("NCL_POD_INITRD", "")
-		nclDir := dataDir()
-		_ = os.MkdirAll(nclDir, 0o755)
-		_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
-		_ = os.WriteFile(filepath.Join(nclDir, "pod-initrd"), []byte("i"), 0o644)
+		t.Setenv("WEFT_KERNEL", "")
+		t.Setenv("WEFT_POD_INITRD", "")
+		microvmDir := dataDir()
+		_ = os.MkdirAll(microvmDir, 0o755)
+		_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
+		_ = os.WriteFile(filepath.Join(microvmDir, "pod-initrd"), []byte("i"), 0o644)
 		k, i, err := locatePodBoot()
 		if err != nil {
 			t.Fatal(err)
@@ -273,8 +273,8 @@ func TestLocatePodBoot(t *testing.T) {
 		i := filepath.Join(tmp, "myinitrd")
 		_ = os.WriteFile(k, []byte("k"), 0o644)
 		_ = os.WriteFile(i, []byte("i"), 0o644)
-		t.Setenv("NCL_KERNEL", k)
-		t.Setenv("NCL_POD_INITRD", i)
+		t.Setenv("WEFT_KERNEL", k)
+		t.Setenv("WEFT_POD_INITRD", i)
 		gk, gi, err := locatePodBoot()
 		if err != nil {
 			t.Fatal(err)
@@ -285,19 +285,19 @@ func TestLocatePodBoot(t *testing.T) {
 	})
 	t.Run("missing kernel", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		t.Setenv("NCL_KERNEL", "")
-		t.Setenv("NCL_POD_INITRD", "")
+		t.Setenv("WEFT_KERNEL", "")
+		t.Setenv("WEFT_POD_INITRD", "")
 		if _, _, err := locatePodBoot(); err == nil || !strings.Contains(err.Error(), "kernel not found") {
 			t.Fatalf("got %v", err)
 		}
 	})
 	t.Run("missing initrd", func(t *testing.T) {
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
-		t.Setenv("NCL_KERNEL", "")
-		t.Setenv("NCL_POD_INITRD", "")
-		nclDir := dataDir()
-		_ = os.MkdirAll(nclDir, 0o755)
-		_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
+		t.Setenv("WEFT_KERNEL", "")
+		t.Setenv("WEFT_POD_INITRD", "")
+		microvmDir := dataDir()
+		_ = os.MkdirAll(microvmDir, 0o755)
+		_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
 		if _, _, err := locatePodBoot(); err == nil || !strings.Contains(err.Error(), "initramfs not found") {
 			t.Fatalf("got %v", err)
 		}
@@ -306,18 +306,18 @@ func TestLocatePodBoot(t *testing.T) {
 
 func TestRunPod_HappyPath(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_POD_INITRD", "")
-	t.Setenv("NCL_NO_AUTO_PULL", "1") // images are pre-seeded
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_POD_INITRD", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1") // images are pre-seeded
 
 	// Seed two pre-pulled container images.
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/", Env: []string{"PATH=/bin"}})
 	seedContainerConfig(t, "redis:7", processSpec{Args: []string{"/redis"}, Cwd: "/", Env: []string{"PATH=/bin"}})
 	// Seed pod boot artefacts.
-	nclDir := dataDir()
-	_ = os.MkdirAll(nclDir, 0o755)
-	_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
-	_ = os.WriteFile(filepath.Join(nclDir, "pod-initrd"), []byte("i"), 0o644)
+	microvmDir := dataDir()
+	_ = os.MkdirAll(microvmDir, 0o755)
+	_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
+	_ = os.WriteFile(filepath.Join(microvmDir, "pod-initrd"), []byte("i"), 0o644)
 
 	manifest := writeManifest(t, map[string]any{
 		"pod_id": "stack",
@@ -327,27 +327,27 @@ func TestRunPod_HappyPath(t *testing.T) {
 		},
 	})
 
-	var gotRegister *vzdv1.RegisterMicroVMRequest
+	var gotRegister *weftv1.RegisterMicroVMRequest
 	var started bool
-	stub := &stubVzd{
-		registerFn: func(_ context.Context, in *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+	stub := &stubWeft{
+		registerFn: func(_ context.Context, in *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 			gotRegister = in
-			return &vzdv1.RegisterMicroVMResponse{}, nil
+			return &weftv1.RegisterMicroVMResponse{}, nil
 		},
-		startFn: func(context.Context, *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error) {
+		startFn: func(context.Context, *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error) {
 			started = true
-			return &vzdv1.StartVMResponse{}, nil
+			return &weftv1.StartVMResponse{}, nil
 		},
 	}
-	socket := startStubVzd(t, stub)
+	socket := startStubWeft(t, stub)
 
-	if err := Run(Args{Pod: manifest, VzdSocket: socket, Project: "p"}); err != nil {
+	if err := Run(Args{Pod: manifest, WeftSocket: socket, Project: "p"}); err != nil {
 		t.Fatalf("RunPod: %v", err)
 	}
 	if !started || gotRegister == nil {
 		t.Fatal("register/start not called")
 	}
-	if gotRegister.Name != "ncl-pod-stack" {
+	if gotRegister.Name != "weft-microvm-pod-stack" {
 		t.Errorf("name = %q", gotRegister.Name)
 	}
 	// config share (weftcfg, read-only) prepended, then 2 rootfs shares.
@@ -369,12 +369,12 @@ func TestRunPod_HappyPath(t *testing.T) {
 
 func TestRunPod_ContainerNotPulled_NoAutoPull(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "missing:img"}},
 	})
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "not pulled") {
 		t.Fatalf("expected not-pulled error, got %v", err)
 	}
@@ -382,14 +382,14 @@ func TestRunPod_ContainerNotPulled_NoAutoPull(t *testing.T) {
 
 func TestRunPod_AutoPullAttempted(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "") // auto-pull is the default
+	t.Setenv("WEFT_NO_AUTO_PULL", "") // auto-pull is the default
 	// Image not in cache → RunPod prints and calls Pull, which fails
 	// against a localhost port with nothing listening (fast, offline).
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "127.0.0.1:1/no/such:tag"}},
 	})
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "pull") {
 		t.Fatalf("expected pull error from auto-pull, got %v", err)
 	}
@@ -399,13 +399,13 @@ func TestRunPod_NoCommand_SpecValidateOrContainerError(t *testing.T) {
 	// A container whose image config has no args and no manifest command
 	// fails in containerFromImage ("no command").
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	seedContainerConfig(t, "alpine:3.21", processSpec{Cwd: "/"})
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "alpine:3.21"}},
 	})
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "no command") {
 		t.Fatalf("expected no-command error, got %v", err)
 	}
@@ -413,16 +413,16 @@ func TestRunPod_NoCommand_SpecValidateOrContainerError(t *testing.T) {
 
 func TestRunPod_MissingBoot(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_POD_INITRD", "")
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_POD_INITRD", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/"})
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "alpine:3.21"}},
 	})
 	// No kernel seeded → locatePodBoot errors.
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "kernel not found") {
 		t.Fatalf("expected kernel-not-found error, got %v", err)
 	}
@@ -430,7 +430,7 @@ func TestRunPod_MissingBoot(t *testing.T) {
 
 func TestRunPod_SpecValidateError_DuplicateID(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	// Two containers with the same id pass loadManifest but fail
 	// spec.Validate (duplicate id).
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/"})
@@ -441,7 +441,7 @@ func TestRunPod_SpecValidateError_DuplicateID(t *testing.T) {
 			{"id": "dup", "image": "alpine:3.21"},
 		},
 	})
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "pod spec") {
 		t.Fatalf("expected pod spec validate error, got %v", err)
 	}
@@ -449,19 +449,19 @@ func TestRunPod_SpecValidateError_DuplicateID(t *testing.T) {
 
 func TestRunPod_DialError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_POD_INITRD", "")
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_POD_INITRD", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/"})
-	nclDir := dataDir()
-	_ = os.MkdirAll(nclDir, 0o755)
-	_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
-	_ = os.WriteFile(filepath.Join(nclDir, "pod-initrd"), []byte("i"), 0o644)
+	microvmDir := dataDir()
+	_ = os.MkdirAll(microvmDir, 0o755)
+	_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
+	_ = os.WriteFile(filepath.Join(microvmDir, "pod-initrd"), []byte("i"), 0o644)
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "alpine:3.21"}},
 	})
-	err := Run(Args{Pod: manifest, VzdSocket: "/tmp/no-vzd-pod.sock"})
+	err := Run(Args{Pod: manifest, WeftSocket: "/tmp/no-weft-pod.sock"})
 	if err == nil {
 		t.Fatal("expected dial error")
 	}
@@ -469,23 +469,23 @@ func TestRunPod_DialError(t *testing.T) {
 
 func TestRunPod_StartError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_POD_INITRD", "")
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_POD_INITRD", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/"})
-	nclDir := dataDir()
-	_ = os.MkdirAll(nclDir, 0o755)
-	_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
-	_ = os.WriteFile(filepath.Join(nclDir, "pod-initrd"), []byte("i"), 0o644)
+	microvmDir := dataDir()
+	_ = os.MkdirAll(microvmDir, 0o755)
+	_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
+	_ = os.WriteFile(filepath.Join(microvmDir, "pod-initrd"), []byte("i"), 0o644)
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "alpine:3.21"}},
 	})
-	stub := &stubVzd{startFn: func(context.Context, *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error) {
+	stub := &stubWeft{startFn: func(context.Context, *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error) {
 		return nil, errStub("start-fail")
 	}}
-	socket := startStubVzd(t, stub)
-	err := Run(Args{Pod: manifest, VzdSocket: socket})
+	socket := startStubWeft(t, stub)
+	err := Run(Args{Pod: manifest, WeftSocket: socket})
 	if err == nil || !strings.Contains(err.Error(), "StartVM") {
 		t.Fatalf("expected StartVM error, got %v", err)
 	}
@@ -493,23 +493,23 @@ func TestRunPod_StartError(t *testing.T) {
 
 func TestRunPod_RegisterError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_POD_INITRD", "")
-	t.Setenv("NCL_NO_AUTO_PULL", "1")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_POD_INITRD", "")
+	t.Setenv("WEFT_NO_AUTO_PULL", "1")
 	seedContainerConfig(t, "alpine:3.21", processSpec{Args: []string{"/web"}, Cwd: "/"})
-	nclDir := dataDir()
-	_ = os.MkdirAll(nclDir, 0o755)
-	_ = os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("k"), 0o644)
-	_ = os.WriteFile(filepath.Join(nclDir, "pod-initrd"), []byte("i"), 0o644)
+	microvmDir := dataDir()
+	_ = os.MkdirAll(microvmDir, 0o755)
+	_ = os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("k"), 0o644)
+	_ = os.WriteFile(filepath.Join(microvmDir, "pod-initrd"), []byte("i"), 0o644)
 	manifest := writeManifest(t, map[string]any{
 		"pod_id":     "stack",
 		"containers": []map[string]any{{"id": "web", "image": "alpine:3.21"}},
 	})
-	stub := &stubVzd{registerFn: func(context.Context, *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+	stub := &stubWeft{registerFn: func(context.Context, *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 		return nil, errStub("nope")
 	}}
-	socket := startStubVzd(t, stub)
-	err := Run(Args{Pod: manifest, VzdSocket: socket})
+	socket := startStubWeft(t, stub)
+	err := Run(Args{Pod: manifest, WeftSocket: socket})
 	if err == nil || !strings.Contains(err.Error(), "RegisterMicroVM") {
 		t.Fatalf("expected RegisterMicroVM error, got %v", err)
 	}

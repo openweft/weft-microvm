@@ -11,41 +11,41 @@ import (
 	"testing"
 	"time"
 
-	vzdv1 "github.com/openweft/weft-proto"
+	weftv1 "github.com/openweft/weft-proto"
 	"google.golang.org/grpc"
 )
 
-// stubVzd is a minimal in-process WeftAgent implementing only the two
+// stubWeft is a minimal in-process WeftAgent implementing only the two
 // RPCs the microvm orchestration calls (RegisterMicroVM, StartVM) plus
 // the embedded unimplemented base for the rest. Per-RPC behaviour is
 // injected via the Fn hooks.
-type stubVzd struct {
-	vzdv1.UnimplementedWeftAgentServer
-	registerFn func(context.Context, *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error)
-	startFn    func(context.Context, *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error)
+type stubWeft struct {
+	weftv1.UnimplementedWeftAgentServer
+	registerFn func(context.Context, *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error)
+	startFn    func(context.Context, *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error)
 }
 
-func (s *stubVzd) RegisterMicroVM(ctx context.Context, in *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+func (s *stubWeft) RegisterMicroVM(ctx context.Context, in *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 	if s.registerFn != nil {
 		return s.registerFn(ctx, in)
 	}
-	return &vzdv1.RegisterMicroVMResponse{}, nil
+	return &weftv1.RegisterMicroVMResponse{}, nil
 }
 
-func (s *stubVzd) StartVM(ctx context.Context, in *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error) {
+func (s *stubWeft) StartVM(ctx context.Context, in *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error) {
 	if s.startFn != nil {
 		return s.startFn(ctx, in)
 	}
-	return &vzdv1.StartVMResponse{}, nil
+	return &weftv1.StartVMResponse{}, nil
 }
 
-// startStubVzd stands up a grpc.Server on a short unix socket and
+// startStubWeft stands up a grpc.Server on a short unix socket and
 // returns the socket path. Cleanup is registered via t.Cleanup.
-func startStubVzd(t *testing.T, stub *stubVzd) string {
+func startStubWeft(t *testing.T, stub *stubWeft) string {
 	t.Helper()
 	socket := filepath.Join("/tmp", fmt.Sprintf("mv-test-%s.sock", time.Now().Format("150405.000000000")))
 	srv := grpc.NewServer()
-	vzdv1.RegisterWeftAgentServer(srv, stub)
+	weftv1.RegisterWeftAgentServer(srv, stub)
 	lis, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen unix %s: %v", socket, err)
@@ -57,14 +57,14 @@ func startStubVzd(t *testing.T, stub *stubVzd) string {
 }
 
 // seedPulledImage materialises a minimal cached rootfs (with the
-// derived .ncl/config.json) so runMicroVM/RunPod skip the auto-pull
+// derived .weft-microvm/config.json) so runMicroVM/RunPod skip the auto-pull
 // path. XDG_DATA_HOME must already be set to a temp dir.
 func seedPulledImage(t *testing.T, image string, args []string) string {
 	t.Helper()
 	rs := refsafe(image)
 	rootfs := rootfsPath(rs)
-	nclDir := filepath.Join(rootfs, ".ncl")
-	if err := os.MkdirAll(nclDir, 0o755); err != nil {
+	microvmDir := filepath.Join(rootfs, ".weft-microvm")
+	if err := os.MkdirAll(microvmDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	var p processSpec
@@ -75,7 +75,7 @@ func seedPulledImage(t *testing.T, image string, args []string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(nclDir, "config.json"), out, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(microvmDir, "config.json"), out, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return rootfs
@@ -85,45 +85,45 @@ func seedPulledImage(t *testing.T, image string, args []string) string {
 // path so locateBootArtefacts resolves without env vars.
 func seedKernel(t *testing.T) {
 	t.Helper()
-	nclDir := dataDir()
-	if err := os.MkdirAll(nclDir, 0o755); err != nil {
+	microvmDir := dataDir()
+	if err := os.MkdirAll(microvmDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(nclDir, "kernel"), []byte("vmlinux"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(microvmDir, "kernel"), []byte("vmlinux"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestRunMicroVM_HappyPath(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INITRD", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INITRD", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	seedKernel(t)
 
-	var gotRegister *vzdv1.RegisterMicroVMRequest
-	var gotStart *vzdv1.StartVMRequest
-	stub := &stubVzd{
-		registerFn: func(_ context.Context, in *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+	var gotRegister *weftv1.RegisterMicroVMRequest
+	var gotStart *weftv1.StartVMRequest
+	stub := &stubWeft{
+		registerFn: func(_ context.Context, in *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 			gotRegister = in
-			return &vzdv1.RegisterMicroVMResponse{}, nil
+			return &weftv1.RegisterMicroVMResponse{}, nil
 		},
-		startFn: func(_ context.Context, in *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error) {
+		startFn: func(_ context.Context, in *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error) {
 			gotStart = in
-			return &vzdv1.StartVMResponse{}, nil
+			return &weftv1.StartVMResponse{}, nil
 		},
 	}
-	socket := startStubVzd(t, stub)
+	socket := startStubWeft(t, stub)
 
-	err := Run(Args{Image: "alpine:3.21", VzdSocket: socket, Project: "team-net"})
+	err := Run(Args{Image: "alpine:3.21", WeftSocket: socket, Project: "team-net"})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if gotRegister == nil || gotStart == nil {
 		t.Fatal("RegisterMicroVM/StartVM not called")
 	}
-	if gotRegister.Name != "ncl-alpine_3.21" {
+	if gotRegister.Name != "weft-microvm-alpine_3.21" {
 		t.Errorf("vm name = %q", gotRegister.Name)
 	}
 	if gotRegister.Project != "team-net" {
@@ -138,31 +138,31 @@ func TestRunMicroVM_HappyPath(t *testing.T) {
 	if !strings.Contains(gotRegister.Cmdline, "virtiofs:rootfs0") {
 		t.Errorf("cmdline = %q", gotRegister.Cmdline)
 	}
-	if gotStart.Name != "ncl-alpine_3.21" {
+	if gotStart.Name != "weft-microvm-alpine_3.21" {
 		t.Errorf("start name = %q", gotStart.Name)
 	}
 }
 
 func TestRunMicroVM_CustomMountTag(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	// Only an ISO present → UKI boot mode (BootIso set, kernel empty).
-	nclDir := dataDir()
-	_ = os.MkdirAll(nclDir, 0o755)
-	if err := os.WriteFile(filepath.Join(nclDir, "ncl-init.iso"), []byte("iso"), 0o644); err != nil {
+	microvmDir := dataDir()
+	_ = os.MkdirAll(microvmDir, 0o755)
+	if err := os.WriteFile(filepath.Join(microvmDir, "weft-microvm-init.iso"), []byte("iso"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	var gotRegister *vzdv1.RegisterMicroVMRequest
-	stub := &stubVzd{registerFn: func(_ context.Context, in *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+	var gotRegister *weftv1.RegisterMicroVMRequest
+	stub := &stubWeft{registerFn: func(_ context.Context, in *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 		gotRegister = in
-		return &vzdv1.RegisterMicroVMResponse{}, nil
+		return &weftv1.RegisterMicroVMResponse{}, nil
 	}}
-	socket := startStubVzd(t, stub)
+	socket := startStubWeft(t, stub)
 
-	if err := Run(Args{Image: "alpine:3.21", VzdSocket: socket, MountTag: "rootfsX"}); err != nil {
+	if err := Run(Args{Image: "alpine:3.21", WeftSocket: socket, MountTag: "rootfsX"}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if gotRegister.BootIso == "" || gotRegister.Kernel != "" {
@@ -178,16 +178,16 @@ func TestRunMicroVM_CustomMountTag(t *testing.T) {
 
 func TestRunMicroVM_RegisterError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	seedKernel(t)
-	stub := &stubVzd{registerFn: func(context.Context, *vzdv1.RegisterMicroVMRequest) (*vzdv1.RegisterMicroVMResponse, error) {
+	stub := &stubWeft{registerFn: func(context.Context, *weftv1.RegisterMicroVMRequest) (*weftv1.RegisterMicroVMResponse, error) {
 		return nil, errors.New("boom-register")
 	}}
-	socket := startStubVzd(t, stub)
+	socket := startStubWeft(t, stub)
 
-	err := Run(Args{Image: "alpine:3.21", VzdSocket: socket})
+	err := Run(Args{Image: "alpine:3.21", WeftSocket: socket})
 	if err == nil || !strings.Contains(err.Error(), "RegisterMicroVM") {
 		t.Fatalf("expected RegisterMicroVM error, got %v", err)
 	}
@@ -195,16 +195,16 @@ func TestRunMicroVM_RegisterError(t *testing.T) {
 
 func TestRunMicroVM_StartError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	seedKernel(t)
-	stub := &stubVzd{startFn: func(context.Context, *vzdv1.StartVMRequest) (*vzdv1.StartVMResponse, error) {
+	stub := &stubWeft{startFn: func(context.Context, *weftv1.StartVMRequest) (*weftv1.StartVMResponse, error) {
 		return nil, errors.New("boom-start")
 	}}
-	socket := startStubVzd(t, stub)
+	socket := startStubWeft(t, stub)
 
-	err := Run(Args{Image: "alpine:3.21", VzdSocket: socket})
+	err := Run(Args{Image: "alpine:3.21", WeftSocket: socket})
 	if err == nil || !strings.Contains(err.Error(), "StartVM") {
 		t.Fatalf("expected StartVM error, got %v", err)
 	}
@@ -212,13 +212,13 @@ func TestRunMicroVM_StartError(t *testing.T) {
 
 func TestRunMicroVM_DialError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	seedKernel(t)
 
 	// Point at a socket nothing listens on → dial (WithBlock) times out.
-	err := Run(Args{Image: "alpine:3.21", VzdSocket: "/tmp/definitely-no-vzd-here.sock"})
+	err := Run(Args{Image: "alpine:3.21", WeftSocket: "/tmp/definitely-no-weft-here.sock"})
 	if err == nil {
 		t.Fatal("expected dial error")
 	}
@@ -226,26 +226,26 @@ func TestRunMicroVM_DialError(t *testing.T) {
 
 func TestRunMicroVM_NoBootArtefacts(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("NCL_KERNEL", "")
-	t.Setenv("NCL_INITRD", "")
-	t.Setenv("NCL_INIT_ISO", "")
+	t.Setenv("WEFT_KERNEL", "")
+	t.Setenv("WEFT_INITRD", "")
+	t.Setenv("WEFT_INIT_ISO", "")
 	seedPulledImage(t, "alpine:3.21", []string{"/bin/sh"})
 	// No kernel / iso seeded → locateBootArtefacts errors before dial.
-	err := Run(Args{Image: "alpine:3.21", VzdSocket: "/tmp/unused.sock"})
-	if err == nil || !strings.Contains(err.Error(), "no ncl boot artefacts") {
+	err := Run(Args{Image: "alpine:3.21", WeftSocket: "/tmp/unused.sock"})
+	if err == nil || !strings.Contains(err.Error(), "no weft-microvm boot artefacts") {
 		t.Fatalf("expected boot-artefact error, got %v", err)
 	}
 }
 
 func TestRunMicroVM_ApplyOverridesError(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	// Seed a rootfs dir but NO .ncl/config.json so applyRunOverrides
+	// Seed a rootfs dir but NO .weft-microvm/config.json so applyRunOverrides
 	// (triggered by a Cmd override) fails.
 	rs := refsafe("alpine:3.21")
 	if err := os.MkdirAll(rootfsPath(rs), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	err := Run(Args{Image: "alpine:3.21", Cmd: []string{"sh"}, VzdSocket: "/tmp/unused.sock"})
+	err := Run(Args{Image: "alpine:3.21", Cmd: []string{"sh"}, WeftSocket: "/tmp/unused.sock"})
 	if err == nil || !strings.Contains(err.Error(), "config.json") {
 		t.Fatalf("expected applyRunOverrides error, got %v", err)
 	}
@@ -267,8 +267,8 @@ func TestBootArtefacts_Describe(t *testing.T) {
 	}
 }
 
-func TestDialVzd_BadSocket(t *testing.T) {
-	_, _, err := dialVzd("/tmp/no-such-vzd.sock")
+func TestDialWeft_BadSocket(t *testing.T) {
+	_, _, err := dialWeft("/tmp/no-such-weft.sock")
 	if err == nil {
 		t.Fatal("expected dial error for missing socket")
 	}
