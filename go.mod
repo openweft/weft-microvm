@@ -7,7 +7,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/openweft/weft-client v0.0.0
 	github.com/openweft/weft-microvm-init v0.0.0
-	github.com/openweft/weft-proto v0.2.0
+	github.com/openweft/weft-proto v0.3.0
 	google.golang.org/grpc v1.81.1
 	oras.land/oras-go/v2 v2.6.0
 )
