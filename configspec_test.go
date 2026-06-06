@@ -2,6 +2,8 @@ package microvm
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -134,5 +136,72 @@ func TestMarshalConfig_Shape(t *testing.T) {
 	}
 	if got.Process.Args[0] != "/bin/true" {
 		t.Errorf("round-trip mismatch: %+v", got.Process)
+	}
+}
+
+// TestProcessFromImageConfigWithRootfs_NamedUser pins named-user
+// resolution against the extracted rootfs. Live test on the 3-DC
+// cluster surfaced ghcr.io/openweft/weft-webui:v0.2.0 (and most
+// distroless images) carrying User="nonroot:nonroot" which the
+// numeric-only parser couldn't handle.
+func TestProcessFromImageConfigWithRootfs_NamedUser(t *testing.T) {
+	rootfs := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootfs, "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rootfs, "etc", "passwd"),
+		[]byte("root:x:0:0:root:/root:/bin/sh\nnonroot:x:65532:65532::/home/nonroot:/sbin/nologin\nalice:x:1000:1000::/home/alice:/bin/bash\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rootfs, "etc", "group"),
+		[]byte("root:x:0:\nnonroot:x:65532:\nstaff:x:50:\nalice:x:1000:\n"),
+		0o644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		user             string
+		wantUID, wantGID uint32
+		wantErr          bool
+	}{
+		{"nonroot", 65532, 65532, false},
+		{"nonroot:nonroot", 65532, 65532, false},
+		{"alice:staff", 1000, 50, false},
+		{"alice:1000", 1000, 1000, false},
+		{"1000:staff", 1000, 50, false},
+		{"1000:1000", 1000, 1000, false},
+		{"ghost", 0, 0, true},
+		{"alice:ghost", 0, 0, true},
+	}
+	for _, c := range cases {
+		t.Run(c.user, func(t *testing.T) {
+			p, err := processFromImageConfigWithRootfs(ocispec.ImageConfig{User: c.user}, rootfs)
+			if c.wantErr {
+				if err == nil {
+					t.Errorf("got nil err for User=%q, want error", c.user)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("got error : %v", err)
+			}
+			if p.User.UID != c.wantUID || p.User.GID != c.wantGID {
+				t.Errorf("uid=%d gid=%d, want %d/%d", p.User.UID, p.User.GID, c.wantUID, c.wantGID)
+			}
+		})
+	}
+}
+
+// TestProcessFromImageConfigWithRootfs_NumericStillWorks confirms the
+// fast path : a numeric User skips the rootfs round-trip entirely
+// (proven by passing rootfs = "/definitely/does/not/exist" — if we
+// fell through, lookupPasswd would fail).
+func TestProcessFromImageConfigWithRootfs_NumericStillWorks(t *testing.T) {
+	p, err := processFromImageConfigWithRootfs(ocispec.ImageConfig{User: "1000:1000"}, "/definitely/does/not/exist")
+	if err != nil {
+		t.Fatalf("numeric path should not touch rootfs : %v", err)
+	}
+	if p.User.UID != 1000 || p.User.GID != 1000 {
+		t.Errorf("uid=%d gid=%d", p.User.UID, p.User.GID)
 	}
 }
