@@ -184,3 +184,37 @@ func TestExtractTar_CorruptHeaderAfterFirstEntry(t *testing.T) {
 		t.Fatalf("expected wrapped tar error, got %v", err)
 	}
 }
+
+
+// TestExtractTar_OverwriteReadonlyFile pins the OCI layer-replace
+// path. Live test on the 3-DC cluster (2026-06-06) surfaced this
+// against /etc/ssl/certs/ca-certificates.crt in
+// ghcr.io/openweft/weft-webui:v0.2.0 : an earlier layer drops the
+// file with mode 0444, a later layer replaces it. extractTar
+// previously failed with EACCES on the second layer's
+// os.OpenFile(O_TRUNC) because O_TRUNC can't truncate a 0444 file.
+// remove-then-recreate is what Docker / podman / containerd do.
+func TestExtractTar_OverwriteReadonlyFile(t *testing.T) {
+	dest := t.TempDir()
+	// Layer 1 : drops the read-only file.
+	first := writeTar(t,
+		tarEntry{tar.Header{Name: "etc/ssl/certs/ca-certificates.crt", Typeflag: tar.TypeReg, Mode: 0o444}, []byte("v1 base")},
+	)
+	if err := extractTar(bytes.NewReader(first), dest); err != nil {
+		t.Fatalf("first layer extract: %v", err)
+	}
+	// Layer 2 : replaces the same path. Was EACCES before the fix.
+	second := writeTar(t,
+		tarEntry{tar.Header{Name: "etc/ssl/certs/ca-certificates.crt", Typeflag: tar.TypeReg, Mode: 0o444}, []byte("v2 replacement")},
+	)
+	if err := extractTar(bytes.NewReader(second), dest); err != nil {
+		t.Fatalf("second layer extract: %v (regression : layer-replace EACCES)", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "etc/ssl/certs/ca-certificates.crt"))
+	if err != nil {
+		t.Fatalf("read after replace: %v", err)
+	}
+	if string(got) != "v2 replacement" {
+		t.Errorf("post-replace content = %q, want %q", got, "v2 replacement")
+	}
+}
