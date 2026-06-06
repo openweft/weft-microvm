@@ -78,3 +78,33 @@ func TestExpandDockerHubShorthand(t *testing.T) {
 		})
 	}
 }
+
+// TestRewriteForMirror pins the cluster-local OCI mirror routing.
+// WEFT_MICROVM_REGISTRY_MIRROR is the operator-facing knob ; the
+// in-cluster zot deploys with sync extension + onDemand=true and
+// caches upstream pulls so a fresh microVM in dc3 reads from local
+// storage even when the image was first fetched by a host in dc1.
+func TestRewriteForMirror(t *testing.T) {
+	cases := []struct {
+		name     string
+		mirror   string
+		in, want string
+	}{
+		{"no-mirror-pass-through", "", "registry-1.docker.io/library/alpine", "registry-1.docker.io/library/alpine"},
+		{"bare-host", "10.255.2.30:8080", "registry-1.docker.io/library/alpine", "10.255.2.30:8080/library/alpine"},
+		{"scheme-stripped", "http://zot.weft.internal:8080", "ghcr.io/openweft/forgejo-ha:v0.2.0-rc2", "zot.weft.internal:8080/openweft/forgejo-ha:v0.2.0-rc2"},
+		{"already-on-mirror", "zot.weft.internal:8080", "zot.weft.internal:8080/openweft/forgejo-ha:v0.2.0-rc2", "zot.weft.internal:8080/openweft/forgejo-ha:v0.2.0-rc2"},
+		{"quay-rewrite", "10.255.2.30:8080", "quay.io/coreos/etcd:v3.6.0", "10.255.2.30:8080/coreos/etcd:v3.6.0"},
+		{"trailing-slash-trim", "10.255.2.30:8080/", "ghcr.io/openweft/weft-webui:v0.2.0", "10.255.2.30:8080/openweft/weft-webui:v0.2.0"},
+		{"empty-after-strip", "://", "registry-1.docker.io/library/alpine", "registry-1.docker.io/library/alpine"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("WEFT_MICROVM_REGISTRY_MIRROR", c.mirror)
+			if got := rewriteForMirror(c.in); got != c.want {
+				t.Errorf("rewriteForMirror(%q) with mirror=%q = %q, want %q", c.in, c.mirror, got, c.want)
+			}
+		})
+	}
+}
