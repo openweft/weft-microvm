@@ -7,6 +7,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
+> **Note.** The entries below this line accumulated while v0.12 through
+> v0.21.0 were tagged without being split into per-version sections. They
+> describe changes that are **already released**, not pending ones. The
+> v0.22.0 section below is the first written against a real tag range
+> (v0.21.0..main); untangling the backlog above it is separate work.
+
+### Added
+- `UninstallPlugin` RPC + `UninstallPluginRequest{name, instance_uuid}` /
+  `UninstallPluginResponse` (commit ce47616). Counterpart to
+  `InstallPlugin`. Reverses Network / SG / VM creation on the agent
+  side via `pluginstore.Manager.Uninstall`, then drops the instance
+  from the StateStore. Identified by (name, instance_uuid) ; UUID
+  mandatory to support multi-instance plugins.
+- `EnablePlugin` / `DisablePlugin` RPCs + `PluginInstance.disabled`
+  bool field (commit 37361e5). Soft admin-state toggle that preserves
+  the install side-effects (VMs keep running) but flips a flag
+  consumer-facing gates honour — e.g. weft-tui's sidebar
+  RequiresPlugin filter hides the plugin's catalogue entries on the
+  next refresh. Both RPCs idempotent ; a no-op when the flag already
+  matches the requested value.
+- `SetPodSpec` / `GetPodSpec` RPCs on `WeftAgent` : operator-facing
+  surface that publishes a guestv1.PodSpec (carried as a protojson-
+  encoded `spec_json` byte blob to avoid importing guestv1 into
+  weft.proto). Pairs with the in-memory `Adapter.SetPodSpec` +
+  `<stateDir>/podspecs.hcl` persistence — operators no longer need
+  to embed the spec at boot to drive the GuestPodPlane HelloAck.
+- `GetMicroVMMetrics` RPC + `MicroVMMetricsResponse` : per-VM
+  telemetry snapshot (cpu / mem / net / disk + uptime). Returns the
+  zero shape until the runtime-telemetry pipeline lands ; the webui
+  Metrics tab renders real fields straight off the wire instead of
+  falling back to Unimplemented + synthetic mock data.
+
 ### Changed (breaking)
 - Rename `labels` annotation map → `properties` across the
   host/VM scheduler surface. Field numbers preserved (wire-compat
@@ -21,6 +53,38 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   - `PodSpec.labels` (guest.proto, 5) → `properties`
   Single naming across the openweft stack ("properties everywhere"
   per the cluster.hcl Host.properties spec field).
+
+## [v0.22.0] — 2026-08-18
+
+First tag since v0.21.0. Additions only against that tag: no message or RPC was
+renamed or removed, and no field number was reused. (The `labels` → `properties`
+rename recorded under Unreleased shipped in v0.21.0 and is not part of this
+release.)
+
+### Added
+- `VMInfo.status` + `SetVMStatus` RPC (`SetVMStatusRequest{uuid, status}` /
+  `SetVMStatusResponse`) : the operator's administrative intent for a VM, as
+  distinct from its observed runtime state. This is what weft-tui needs to show
+  and flip that intent.
+- `VMInfo.restart_count` + `VMInfo.max_restarts` : the k8s-style RESTARTS
+  column, so a supervisor's retry budget is visible on the wire rather than
+  inferred.
+- `RestartVMRequest.host_uuid` : lets a restart be dispatched across hosts
+  instead of only to the one holding the connection.
+- `RegisterMicroVMRequest` / `RegisterMicroVMOp` : `cpu` and `mem_mb`
+  workload-shape fields, and an `image` field carrying the OCI reference.
+- `UninstallPlugin` RPC (`UninstallPluginRequest{name, instance_uuid}` /
+  `UninstallPluginResponse`) : the counterpart to `InstallPlugin`.
+- `EnablePlugin` / `DisablePlugin` RPCs and `PluginInstance.disabled` : a soft
+  admin-state toggle that leaves the install side-effects in place.
+- `Flavor.uuid` promoted to a stable identifier.
+
+### Changed
+- The `go` directive moves to 1.26.4, the fleet floor.
+- The `wire-compat` CI gate was dropped during development, deliberately: while
+  the schema moved quickly every legitimate refactor flagged as breaking. This
+  tag is the stable baseline that commit asked for, so the gate can be
+  reinstated against **v0.22.0** rather than against a floating latest.
 
 ## [v0.11.6] — 2026-06-14
 
