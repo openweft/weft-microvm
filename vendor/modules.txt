@@ -11,7 +11,7 @@ github.com/google/go-cmp/cmp/internal/diff
 github.com/google/go-cmp/cmp/internal/flags
 github.com/google/go-cmp/cmp/internal/function
 github.com/google/go-cmp/cmp/internal/value
-# github.com/grpc-transports/ssh v0.2.0 => ../../grpc-transports/ssh
+# github.com/grpc-transports/ssh v0.2.0
 ## explicit; go 1.25.0
 github.com/grpc-transports/ssh
 # github.com/hashicorp/hcl/v2 v2.24.0
@@ -33,14 +33,14 @@ github.com/opencontainers/go-digest
 ## explicit; go 1.18
 github.com/opencontainers/image-spec/specs-go
 github.com/opencontainers/image-spec/specs-go/v1
-# github.com/openweft/weft-client v0.0.0 => ../weft-client
+# github.com/openweft/weft-client v0.2.2
 ## explicit; go 1.25.0
 github.com/openweft/weft-client
-# github.com/openweft/weft-microvm-init v0.0.0 => ../weft-microvm-init
+# github.com/openweft/weft-microvm-init v0.2.4
 ## explicit; go 1.25.1
 github.com/openweft/weft-microvm-init/pkg/pod
-# github.com/openweft/weft-proto v0.14.0 => ../weft-proto
-## explicit; go 1.25.0
+# github.com/openweft/weft-proto v0.22.0
+## explicit; go 1.26.4
 github.com/openweft/weft-proto
 # github.com/zclconf/go-cty v1.18.1
 ## explicit; go 1.25
@@ -237,8 +237,3 @@ oras.land/oras-go/v2/registry/remote/auth
 oras.land/oras-go/v2/registry/remote/errcode
 oras.land/oras-go/v2/registry/remote/internal/errutil
 oras.land/oras-go/v2/registry/remote/retry
-# github.com/openweft/weft-client => ../weft-client
-# github.com/openweft/weft-proto => ../weft-proto
-# github.com/openweft/weft-microvm-init => ../weft-microvm-init
-# github.com/grpc-transports/ssh => ../../grpc-transports/ssh
-# github.com/grpc-transports/wireguard => ../../grpc-transports/wireguard

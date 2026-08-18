@@ -1,13 +1,13 @@
 module github.com/openweft/weft-microvm
 
-go 1.25.1
+go 1.26.4
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
-	github.com/openweft/weft-client v0.0.0
-	github.com/openweft/weft-microvm-init v0.0.0
-	github.com/openweft/weft-proto v0.14.0
+	github.com/openweft/weft-client v0.2.2
+	github.com/openweft/weft-microvm-init v0.2.4
+	github.com/openweft/weft-proto v0.22.0
 	google.golang.org/grpc v1.81.1
 	oras.land/oras-go/v2 v2.6.0
 )
@@ -31,16 +31,3 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
-
-// Local sibling checkouts — until the repos are published.
-replace github.com/openweft/weft-client => ../weft-client
-
-replace github.com/openweft/weft-proto => ../weft-proto
-
-replace github.com/openweft/weft-microvm-init => ../weft-microvm-init
-
-replace github.com/grpc-transports/ssh => ../../grpc-transports/ssh
-
-// Transitive local module pulled in via weft-client (Go honours only the
-// main module's replace block).
-replace github.com/grpc-transports/wireguard => ../../grpc-transports/wireguard
