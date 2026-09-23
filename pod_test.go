@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	weftv1 "github.com/openweft/weft-proto"
 	weftpod "github.com/openweft/weft-microvm-init/pkg/pod"
+	weftv1 "github.com/openweft/weft-proto"
 )
 
 // writeManifest dumps a podManifest-shaped JSON to a temp file and
