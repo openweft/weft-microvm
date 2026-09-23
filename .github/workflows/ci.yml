@@ -1,0 +1,113 @@
+name: CI
+
+# This repository had no CI at all. That is not a small gap here: `main` did
+# not compile for nearly three months (2026-06-29 to 2026-09-23, issue #3) and
+# nothing said so. `go vet` failing meant `go test` reported "[build failed]"
+# for the root package, so its tests had not run either.
+#
+# THE VENDOR TREE IS THE BUILD INPUT, NOT go.mod's replace BLOCK.
+# go.mod replaces weft-proto, weft-client and weft-microvm-init with sibling
+# paths (../weft-proto, …). CI clones this repository alone, so those paths do
+# not exist here -- and it does not matter, because a committed vendor/ makes
+# Go build with -mod=vendor and ignore the replace directives entirely.
+#
+# That is exactly what hid #3: `go list -m` happily reported
+# `weft-proto v0.14.0 => ../weft-proto` (which has the fields) while the
+# compiler read vendor/ (which did not). So:
+#
+#   * do NOT add `go mod tidy -diff` or `go mod verify`. Both need the sibling
+#     checkouts and would fail here for a reason that has nothing to do with
+#     the code.
+#   * the drift this repository is actually exposed to -- vendor/ falling
+#     behind the sibling modules -- CANNOT be checked from inside a single-
+#     repository clone. It needs a job that checks out the siblings too, and
+#     that is not written yet. It is named here rather than faked.
+#
+# The matrix was MEASURED on this module, not copied: all eight pairs below
+# were cross-built locally first, and `go vet` (which type-checks _test.go too)
+# was run for linux, darwin and windows before any of them was listed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CGO_ENABLED: "0"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows is DELIBERATELY absent from this job and present in
+        # cross-build below. The tests hard-code POSIX paths ("/tmp"
+        # in cache_test.go, extract_test.go, grpc_orch_test.go) and
+        # unix-socket paths, and not one of them is guarded by
+        # runtime.GOOS or t.Skip. They compile for windows -- `go vet
+        # GOOS=windows` passes, which is why the cross lane lists it
+        # -- but they cannot pass there. Making them pass is a change
+        # to the tests, not to this file.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build ./...
+      - run: go vet ./...
+      - name: gofmt
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          drift=$(gofmt -l . | grep -v '^vendor/' || true)
+          if [ -n "$drift" ]; then echo "::error::not gofmt-clean:"; echo "$drift"; exit 1; fi
+      - run: go test -count=1 ./...
+
+  cross:
+    name: cross-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The target this code actually runs on is a Linux micro-VM guest,
+          # and `go build ./...` on a Mac never compiles a linux-only file --
+          # which is a second way a break here goes unseen.
+          - {goos: linux, goarch: amd64}
+          - {goos: linux, goarch: arm64}
+          - {goos: linux, goarch: riscv64}
+          - {goos: linux, goarch: s390x}
+          - {goos: darwin, goarch: amd64}
+          - {goos: darwin, goarch: arm64}
+          - {goos: windows, goarch: amd64}
+          - {goos: freebsd, goarch: amd64}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go build ./...
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race -count=1 ./...
