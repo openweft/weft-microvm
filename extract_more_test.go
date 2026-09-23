@@ -185,7 +185,6 @@ func TestExtractTar_CorruptHeaderAfterFirstEntry(t *testing.T) {
 	}
 }
 
-
 // TestExtractTar_OverwriteReadonlyFile pins the OCI layer-replace
 // path. Live test on the 3-DC cluster (2026-06-06) surfaced this
 // against /etc/ssl/certs/ca-certificates.crt in
