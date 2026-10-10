@@ -1,6 +1,6 @@
 module github.com/openweft/weft-microvm
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
@@ -8,8 +8,8 @@ require (
 	github.com/openweft/weft-client v0.0.0
 	github.com/openweft/weft-microvm-init v0.0.0
 	github.com/openweft/weft-proto v0.14.0
-	google.golang.org/grpc v1.81.1
-	oras.land/oras-go/v2 v2.6.0
+	google.golang.org/grpc v1.84.0
+	oras.land/oras-go/v2 v2.6.2
 )
 
 require (
@@ -20,15 +20,15 @@ require (
 	github.com/hashicorp/hcl/v2 v2.24.0 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/zclconf/go-cty v1.18.1 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
-	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
-	golang.org/x/tools v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
