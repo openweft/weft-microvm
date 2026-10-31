@@ -1,6 +1,6 @@
 module github.com/openweft/weft-microvm
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/opencontainers/go-digest v1.0.0
