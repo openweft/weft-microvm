@@ -305,6 +305,25 @@ func TestWriteSecretFile_LstatError(t *testing.T) {
 	// A path under a regular file: Lstat fails with ENOTDIR, not ENOENT.
 	if err := writeSecretFile(filepath.Join(f, "x"), []byte("x")); err == nil || !strings.Contains(err.Error(), "not a directory") {
 		t.Fatalf("expected ENOTDIR, got %v", err)
+	} else if !strings.HasPrefix(err.Error(), "lstat ") {
+		t.Fatalf("expected the Lstat error itself, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_WritesContent(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "s")
+	if err := writeSecretFile(p, []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSecretFile(p, []byte("two")); err != nil { // replaces atomically
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "two" {
+		t.Errorf("content = %q", b)
+	}
+	// Missing directory: the real CreateTemp error, no panic.
+	if err := writeSecretFile(filepath.Join(t.TempDir(), "nodir", "s"), []byte("x")); err == nil {
+		t.Fatal("expected error for a missing directory")
 	}
 }
 
