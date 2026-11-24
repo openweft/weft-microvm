@@ -236,6 +236,66 @@ func TestWritePodJSON(t *testing.T) {
 	}
 }
 
+func TestWritePodJSON_Modes(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// Pre-existing loose dir and file must be tightened.
+	loose := filepath.Join(dataDir(), "pods", "p1")
+	if err := os.MkdirAll(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(loose, "pod.json"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	di, _ := os.Stat(dir)
+	if m := di.Mode().Perm(); m != 0o700 {
+		t.Errorf("dir mode = %o, want 700", m)
+	}
+	fi, err := os.Stat(filepath.Join(dir, "pod.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := fi.Mode().Perm(); m != 0o600 {
+		t.Errorf("pod.json mode = %o, want 600", m)
+	}
+	ents, _ := os.ReadDir(dir)
+	if len(ents) != 1 {
+		t.Errorf("leftover temp files: %v", ents)
+	}
+}
+
+func TestWritePodJSON_RefusesSymlink(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(dataDir(), "pods", "p1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(dir, "pod.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink refusal, got %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep" {
+		t.Errorf("symlink target modified: %q", b)
+	}
+}
+
+func TestWriteSecretFile_NotRegular(t *testing.T) {
+	d := t.TempDir()
+	if err := writeSecretFile(d, []byte("x")); err == nil {
+		t.Fatal("expected refusal for a directory target")
+	}
+}
+
 func TestWritePodJSON_MkdirError(t *testing.T) {
 	// Point XDG_DATA_HOME at a regular file so MkdirAll under it fails.
 	f := filepath.Join(t.TempDir(), "not-a-dir")

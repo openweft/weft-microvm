@@ -236,17 +236,61 @@ func envToMap(env []string) map[string]string {
 // host path exposed to the guest as the virtio-fs config share.
 func writePodJSON(podID string, spec weftpod.Spec) (string, error) {
 	dir := filepath.Join(dataDir(), "pods", podID)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// pod.json can carry WireGuard and CubeFS secrets: owner-only.
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("mkdir pod config dir: %w", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil { // a pre-existing dir keeps its old mode otherwise
+		return "", fmt.Errorf("chmod pod config dir: %w", err)
 	}
 	b, err := json.MarshalIndent(spec, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal pod.json: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "pod.json"), b, 0o644); err != nil {
+	if err := writeSecretFile(filepath.Join(dir, "pod.json"), b); err != nil {
 		return "", fmt.Errorf("write pod.json: %w", err)
 	}
 	return dir, nil
+}
+
+// writeSecretFile writes data to path with mode 0600, atomically: a temp
+// file in the same directory is written, fsynced and renamed over path. A
+// symlink at path is refused rather than followed or silently replaced.
+func writeSecretFile(path string, data []byte) (err error) {
+	if fi, lerr := os.Lstat(path); lerr == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a symlink; refusing to write a secret through it", path)
+		}
+		if !fi.Mode().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", path)
+		}
+	} else if !os.IsNotExist(lerr) {
+		return lerr
+	}
+	// CreateTemp opens O_EXCL with mode 0600.
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-"+filepath.Base(path)+"-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err = tmp.Write(data); err != nil {
+		return err
+	}
+	if err = tmp.Chmod(0o600); err != nil {
+		return err
+	}
+	if err = tmp.Sync(); err != nil {
+		return err
+	}
+	if err = tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // locatePodBoot resolves the kernel + weft-init initramfs for pod
