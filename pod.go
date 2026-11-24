@@ -20,6 +20,7 @@ package microvm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -240,7 +241,7 @@ func writePodJSON(podID string, spec weftpod.Spec) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("mkdir pod config dir: %w", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil { // a pre-existing dir keeps its old mode otherwise
+	if err := osChmod(dir, 0o700); err != nil { // a pre-existing dir keeps its old mode otherwise
 		return "", fmt.Errorf("chmod pod config dir: %w", err)
 	}
 	b, err := json.MarshalIndent(spec, "", "  ")
@@ -268,7 +269,7 @@ func writeSecretFile(path string, data []byte) (err error) {
 		return lerr
 	}
 	// CreateTemp opens O_EXCL with mode 0600.
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-"+filepath.Base(path)+"-*")
+	tmp, err := createTemp(filepath.Dir(path), ".tmp-"+filepath.Base(path)+"-*")
 	if err != nil {
 		return err
 	}
@@ -278,20 +279,20 @@ func writeSecretFile(path string, data []byte) (err error) {
 			_ = os.Remove(tmp.Name())
 		}
 	}()
-	if _, err = tmp.Write(data); err != nil {
-		return err
-	}
-	if err = tmp.Chmod(0o600); err != nil {
-		return err
-	}
-	if err = tmp.Sync(); err != nil {
-		return err
-	}
-	if err = tmp.Close(); err != nil {
+	_, werr := tmp.Write(data)
+	serr := tmp.Sync()
+	cerr := tmp.Close()
+	if err = errors.Join(werr, serr, cerr); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
 }
+
+// Seams so tests can reach failure branches no real filesystem gives an owner.
+var (
+	osChmod    = os.Chmod
+	createTemp = os.CreateTemp
+)
 
 // locatePodBoot resolves the kernel + weft-init initramfs for pod
 // mode. Pod mode is direct-Linux only (weft-init is an initramfs

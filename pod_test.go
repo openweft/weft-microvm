@@ -3,6 +3,7 @@ package microvm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -291,8 +292,59 @@ func TestWritePodJSON_RefusesSymlink(t *testing.T) {
 
 func TestWriteSecretFile_NotRegular(t *testing.T) {
 	d := t.TempDir()
-	if err := writeSecretFile(d, []byte("x")); err == nil {
-		t.Fatal("expected refusal for a directory target")
+	if err := writeSecretFile(d, []byte("x")); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("expected not-regular refusal, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_LstatError(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A path under a regular file: Lstat fails with ENOTDIR, not ENOENT.
+	if err := writeSecretFile(filepath.Join(f, "x"), []byte("x")); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("expected ENOTDIR, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_CreateTempError(t *testing.T) {
+	old := createTemp
+	t.Cleanup(func() { createTemp = old })
+	createTemp = func(string, string) (*os.File, error) { return nil, errors.New("boom") }
+	p := filepath.Join(t.TempDir(), "s")
+	if err := writeSecretFile(p, []byte("x")); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected create error, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_WriteError(t *testing.T) {
+	old := createTemp
+	t.Cleanup(func() { createTemp = old })
+	createTemp = func(dir, pat string) (*os.File, error) {
+		f, err := os.CreateTemp(dir, pat)
+		if err == nil {
+			_ = f.Close() // writing to a closed file fails
+		}
+		return f, err
+	}
+	d := t.TempDir()
+	p := filepath.Join(d, "s")
+	if err := writeSecretFile(p, []byte("x")); err == nil {
+		t.Fatal("expected write error")
+	}
+	if ents, _ := os.ReadDir(d); len(ents) != 0 {
+		t.Errorf("temp file left behind: %v", ents)
+	}
+}
+
+func TestWritePodJSON_ChmodError(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	old := osChmod
+	t.Cleanup(func() { osChmod = old })
+	osChmod = func(string, os.FileMode) error { return errors.New("nope") }
+	if _, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"}); err == nil || !strings.Contains(err.Error(), "chmod pod config dir") {
+		t.Fatalf("expected chmod error, got %v", err)
 	}
 }
 
