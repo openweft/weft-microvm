@@ -3,6 +3,7 @@ package microvm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -233,6 +234,136 @@ func TestWritePodJSON(t *testing.T) {
 	}
 	if got.PodID != "p1" || len(got.Containers) != 1 {
 		t.Errorf("round-trip mismatch: %+v", got)
+	}
+}
+
+func TestWritePodJSON_Modes(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// Pre-existing loose dir and file must be tightened.
+	loose := filepath.Join(dataDir(), "pods", "p1")
+	if err := os.MkdirAll(loose, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(loose, "pod.json"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	di, _ := os.Stat(dir)
+	if m := di.Mode().Perm(); m != 0o700 {
+		t.Errorf("dir mode = %o, want 700", m)
+	}
+	fi, err := os.Stat(filepath.Join(dir, "pod.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := fi.Mode().Perm(); m != 0o600 {
+		t.Errorf("pod.json mode = %o, want 600", m)
+	}
+	ents, _ := os.ReadDir(dir)
+	if len(ents) != 1 {
+		t.Errorf("leftover temp files: %v", ents)
+	}
+}
+
+func TestWritePodJSON_RefusesSymlink(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := filepath.Join(dataDir(), "pods", "p1")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(t.TempDir(), "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(dir, "pod.json")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"})
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink refusal, got %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "keep" {
+		t.Errorf("symlink target modified: %q", b)
+	}
+}
+
+func TestWriteSecretFile_NotRegular(t *testing.T) {
+	d := t.TempDir()
+	if err := writeSecretFile(d, []byte("x")); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("expected not-regular refusal, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_LstatError(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(f, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A path under a regular file: Lstat fails with ENOTDIR, not ENOENT.
+	if err := writeSecretFile(filepath.Join(f, "x"), []byte("x")); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("expected ENOTDIR, got %v", err)
+	} else if !strings.HasPrefix(err.Error(), "lstat ") {
+		t.Fatalf("expected the Lstat error itself, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_WritesContent(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "s")
+	if err := writeSecretFile(p, []byte("one")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSecretFile(p, []byte("two")); err != nil { // replaces atomically
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "two" {
+		t.Errorf("content = %q", b)
+	}
+	// Missing directory: the real CreateTemp error, no panic.
+	if err := writeSecretFile(filepath.Join(t.TempDir(), "nodir", "s"), []byte("x")); err == nil {
+		t.Fatal("expected error for a missing directory")
+	}
+}
+
+func TestWriteSecretFile_CreateTempError(t *testing.T) {
+	old := createTemp
+	t.Cleanup(func() { createTemp = old })
+	createTemp = func(string, string) (*os.File, error) { return nil, errors.New("boom") }
+	p := filepath.Join(t.TempDir(), "s")
+	if err := writeSecretFile(p, []byte("x")); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("expected create error, got %v", err)
+	}
+}
+
+func TestWriteSecretFile_WriteError(t *testing.T) {
+	old := createTemp
+	t.Cleanup(func() { createTemp = old })
+	createTemp = func(dir, pat string) (*os.File, error) {
+		f, err := os.CreateTemp(dir, pat)
+		if err == nil {
+			_ = f.Close() // writing to a closed file fails
+		}
+		return f, err
+	}
+	d := t.TempDir()
+	p := filepath.Join(d, "s")
+	if err := writeSecretFile(p, []byte("x")); err == nil {
+		t.Fatal("expected write error")
+	}
+	if ents, _ := os.ReadDir(d); len(ents) != 0 {
+		t.Errorf("temp file left behind: %v", ents)
+	}
+}
+
+func TestWritePodJSON_ChmodError(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	old := osChmod
+	t.Cleanup(func() { osChmod = old })
+	osChmod = func(string, os.FileMode) error { return errors.New("nope") }
+	if _, err := writePodJSON("p1", weftpod.Spec{PodID: "p1"}); err == nil || !strings.Contains(err.Error(), "chmod pod config dir") {
+		t.Fatalf("expected chmod error, got %v", err)
 	}
 }
 
